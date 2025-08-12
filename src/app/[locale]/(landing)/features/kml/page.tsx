@@ -1,8 +1,8 @@
 // app/features/kml/page.tsx
 import { Metadata } from "next";
 
-import { CheckCircle, Upload, Palette, Download, Code } from "lucide-react";
-import { FeatureDetail } from "@/components/FeatureDetail";
+import { CheckCircle, Upload, Palette, Download, Code, Users } from "lucide-react";
+import FeatureDetail from "@/components/FeatureDetail";
 
 export const metadata: Metadata = {
   title: "Génération KML - Localink",
@@ -19,17 +19,20 @@ export default function KMLPage() {
         {
           
           title: "Import multiple",
-          description: "Importez depuis Excel, CSV ou APIs"
+          description: "Importez depuis Excel, CSV ou APIs",
+          icon: <Users className="w-5 h-5" />,
         },
         {
           
           title: "Style avancé",
-          description: "Personnalisation des icônes et couleurs"
+          description: "Personnalisation des icônes et couleurs",
+          icon: <Users className="w-5 h-5" />,
         },
         {
         
           title: "Export instantané",
-          description: "Téléchargement en KML/KMZ"
+          description: "Téléchargement en KML/KMZ",
+          icon: <Users className="w-5 h-5" />,
         }
       ]}
       cta={{

@@ -3,18 +3,18 @@ import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
 
-function FeatureDetail({
+export default function FeatureDetail({
   title,
   subtitle,
   features,
-
+  
   image,
   cta,
   children,
 }: {
   title: string;
   subtitle: string;
-  features: { title: string; description: string }[];
+  features: { title: string; description: string ,  icon:  React.ReactNode}[];
   image?: string;
   
   cta?: { text: string; href: string };
