@@ -1,0 +1,108 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                Int              @id @default(autoincrement())
+  email             String           @unique
+  passwordHash      String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  emailVerified     DateTime?
+  role              String           @default("USER")
+  sessions          Session[]
+  passwordResets    PasswordReset[]
+  stripeCustomerId  String?          @unique
+  subscriptionLevel SubscriptionPlan @default(FREE)
+  subscriptions     Subscription[]
+  clients           Client[]
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  PREMIUM
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  userId               Int
+  user                 User               @relation(fields: [userId], references: [id])
+  stripeSubscriptionId String             @unique
+  stripePriceId        String // Obligatoire (ex: "price_abc123")
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime // Date de fin de cycle
+  planType             SubscriptionPlan
+  createdAt            DateTime           @default(now())
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  UNPAID
+  TRIALING
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+}
+
+model PasswordReset {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  used      Boolean  @default(false)
+}
+
+model Session {
+  id        String   @id
+  userId    Int?
+  expiresAt DateTime
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Client {
+  id            Int      @id @default(autoincrement())
+  nomEntreprise String
+  urlEntreprise String
+  urlMyBusiness String
+  telEntreprise String
+  motsCles      String
+  adresseDepart String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relation: Ce champ lie le client à un utilisateur spécifique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int // C'est la clé étrangère
+
+  // Relation : pour statistiques
+  stats   ClientStats? @relation(fields: [statsId], references: [id])
+  statsId Int?         @unique
+
+  @@unique([userId, nomEntreprise])
+}
+
+model ClientStats {
+  id               Int @id @default(autoincrement())
+  totalPoints      Int @default(0)
+  totalMaps        Int @default(0)
+  totalItineraries Int @default(0)
+
+  client Client? @relation
+}
