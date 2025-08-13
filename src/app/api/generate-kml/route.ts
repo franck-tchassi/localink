@@ -1,9 +1,11 @@
+// app/api/generate-kml/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import polyline from '@mapbox/polyline';
 import { prisma } from '@/db/prisma';
 import { validateSessionToken } from '@/actions/auth';
 import { parse } from 'cookie';
-import { SubscriptionStatus, SubscriptionPlan } from '@prisma/client';
+import { SubscriptionStatus, SubscriptionPlan, ClientStats } from '@prisma/client';
 
 interface KMLPoint {
   Nom: string;
@@ -42,7 +44,6 @@ const statusMap: Record<string, SubscriptionStatus> = {
   incomplete_expired: 'INCOMPLETE_EXPIRED'
 };
 
-
 async function getUserPlanLimits(userId: number): Promise<UserPlanLimits> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -60,7 +61,6 @@ async function getUserPlanLimits(userId: number): Promise<UserPlanLimits> {
 
   if (!user) throw new Error('User not found');
 
-  // Priorité au subscriptionLevel dans User
   if (user.subscriptionLevel === 'PRO') {
     return {
       maxClients: 50,
@@ -77,7 +77,6 @@ async function getUserPlanLimits(userId: number): Promise<UserPlanLimits> {
     };
   }
 
-  // Fallback aux subscriptions si subscriptionLevel non défini
   if (user.subscriptions.length > 0) {
     const subscription = user.subscriptions[0];
     
@@ -98,7 +97,6 @@ async function getUserPlanLimits(userId: number): Promise<UserPlanLimits> {
     }
   }
 
-  // Plan gratuit par défaut
   return {
     maxClients: 3,
     maxPointsPerMap: 200,
@@ -106,7 +104,6 @@ async function getUserPlanLimits(userId: number): Promise<UserPlanLimits> {
     supportType: 'none'
   };
 }
-
 
 function generateDataPoints(data: KMLRequestData, center: { lat: number; lng: number }) {
   const keywords = data.motsCles.split(';').map(kw => kw.trim()).filter(Boolean);
@@ -275,7 +272,7 @@ export async function POST(request: NextRequest) {
       return new NextResponse(JSON.stringify({ error: "Clé API Google non configurée." }), { status: 500 });
     }
 
-    // 3. Vérification des limites du plan
+    // Vérification des limites du plan
     const planLimits = await getUserPlanLimits(userId);
 
     // Nombre de clients déjà créés
@@ -318,8 +315,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Upsert avec le userId de la session
-    await prisma.client.upsert({
+    // Upsert du client
+    const client = await prisma.client.upsert({
       where: {
         userId_nomEntreprise: {
           userId,
@@ -343,6 +340,9 @@ export async function POST(request: NextRequest) {
         motsCles: data.motsCles,
         adresseDepart: data.adresseDepart,
       },
+      include: {
+        stats: true
+      }
     });
 
     // Géocoder l'adresse de départ
@@ -354,7 +354,7 @@ export async function POST(request: NextRequest) {
       return new NextResponse(JSON.stringify({ error: `Adresse introuvable: ${data.adresseDepart}` }), { status: 400 });
     }
 
-    const center = geocodeData.results[0].geometry.location; // { lat, lng }
+    const center = geocodeData.results[0].geometry.location;
 
     // Générer les données
     const { points, circleRadii } = generateDataPoints(data, center);
@@ -364,6 +364,35 @@ export async function POST(request: NextRequest) {
 
     // KML generation
     const kmlString = await generateKMLString(data, center, points, circleRadii);
+
+    // Mise à jour des statistiques du client
+if (!client.statsId) {
+  // Crée les stats si elles n'existent pas
+  const stats = await prisma.clientStats.create({
+    data: {
+      totalPoints: points.length,
+      totalMaps: 1,
+      totalItineraries: data.nombreItineraires,
+    }
+  });
+  
+  // Lie les stats au client
+  await prisma.client.update({
+    where: { id: client.id },
+    data: { statsId: stats.id }
+  });
+} else {
+  // Met à jour les stats existantes
+  await prisma.clientStats.update({
+    where: { id: client.statsId },
+    data: {
+      totalPoints: { increment: points.length },
+      totalMaps: { increment: 1 },
+      totalItineraries: { increment: data.nombreItineraires },
+    }
+  });
+}
+
     const fileName = `carte_seo_${data.nomEntreprise.replace(/\s+/g, '_').toLowerCase()}.kml`;
 
     return new Response(kmlString, {
